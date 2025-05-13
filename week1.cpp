@@ -18,15 +18,15 @@
 #define max_absolute_pitch_angle 45
 #define time_out 0.5
 #define A 0.02
-#define thrust_neutral 1400
-#define thrust_amplitude 100
+#define thrust_neutral 1500
+#define thrust_amplitude 200
 #define thrust_max 2000
 #define thrust_min 0
 #define joystick_max 255
 
 #define pitch_amplitude 10
-#define pitch_gain 16
-#define pitch_derivative_gain 2.0
+#define pitch_gain 12.0
+#define pitch_derivative_gain 1.5
 #define pitch_integral_gain 0.0
 #define pitch_integral_saturated 100
 // #define pitch_amplitude 0
@@ -36,9 +36,9 @@
 // #define pitch_integral_saturated 100
 
 #define roll_amplitude 10
-#define roll_gain 13
-#define roll_derivative_gain 2.0 
-#define roll_integral_gain 0.0
+#define roll_gain 14.25
+#define roll_derivative_gain 1.75
+#define roll_integral_gain 0.1
 #define roll_integral_saturated 100
 
 // #define roll_amplitude 0
@@ -48,7 +48,7 @@
 // #define roll_integral_saturated 100
 
 #define yaw_amplitude 100
-#define yaw_gain 2.0
+#define yaw_gain 0.85
 
 int setup_imu();
 void calibrate_imu();
@@ -142,6 +142,12 @@ int main (int argc, char *argv[]) {
 	//in main before while(1) loop add...
 	setup_joystick();
 	signal(SIGINT, &trap);
+
+	// motor_commands[0] = 2;
+	// motor_commands[1] = 2;
+	// motor_commands[2] = 2;
+	// motor_commands[3] = 2;
+	// set_motors(motor_commands[3], motor_commands[2], motor_commands[1], motor_commands[0]);
     
 	//be sure to update the while(1) in main to use run_program instead
 	while(run_program == 1)
@@ -161,6 +167,7 @@ int main (int argc, char *argv[]) {
 		set_pitch(joystick_data.pitch);
 		set_roll(joystick_data.roll);
 		set_yaw(joystick_data.yaw);
+
 		if (run_program == 0){
 			motor_commands[0] = 0;
 			motor_commands[1] = 0;
@@ -180,6 +187,8 @@ int main (int argc, char *argv[]) {
 			pid_roll_control();
 			yaw_control();
 			set_motors(motor_commands[3], motor_commands[2], motor_commands[1], motor_commands[0]);
+			// set_motors(200, 200,200, 2);
+
 		}
 	}
 
@@ -556,7 +565,7 @@ void yaw_control() {
 	motor_commands[3] = motor_commands[3] - yaw_error * yaw_gain;
 
 	// printf("%d; %d; %d; %d; %10.5f; %10.5f\n", motor_commands[0], motor_commands[1], motor_commands[2], motor_commands[3], x_gyro_calibrated, yaw_desired);
-	printf("%d; %d; %d; %d; %10.5f\n", motor_commands[0], motor_commands[1], motor_commands[2], motor_commands[3], pitch_t);
+	printf("%d; %d; %d; %d; %10.5f; %10.5f\n", motor_commands[0], motor_commands[1], motor_commands[2], motor_commands[3], pitch_t, roll_t);
 
 
 }
