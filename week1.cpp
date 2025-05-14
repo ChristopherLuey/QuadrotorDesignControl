@@ -14,20 +14,20 @@
 
 #define calibration 1000.0
 #define max_gyro_rate 600
-#define max_absolute_roll_angle 45
-#define max_absolute_pitch_angle 45
+#define max_absolute_roll_angle 180
+#define max_absolute_pitch_angle 180
 #define time_out 0.5
-#define A 0.02
-#define thrust_neutral 1500
-#define thrust_amplitude 200
+#define A 0.04
+#define thrust_neutral 1400
+#define thrust_amplitude 100
 #define thrust_max 2000
 #define thrust_min 0
 #define joystick_max 255
 
 #define pitch_amplitude 10
 #define pitch_gain 12.0
-#define pitch_derivative_gain 1.5
-#define pitch_integral_gain 0.0
+#define pitch_derivative_gain 1.75
+#define pitch_integral_gain 0.3
 #define pitch_integral_saturated 100
 // #define pitch_amplitude 0
 // #define pitch_gain 0
@@ -36,9 +36,9 @@
 // #define pitch_integral_saturated 100
 
 #define roll_amplitude 10
-#define roll_gain 14.25
+#define roll_gain 12.75
 #define roll_derivative_gain 1.75
-#define roll_integral_gain 0.1
+#define roll_integral_gain 0.3
 #define roll_integral_saturated 100
 
 // #define roll_amplitude 0
@@ -48,7 +48,7 @@
 // #define roll_integral_saturated 100
 
 #define yaw_amplitude 100
-#define yaw_gain 0.85
+#define yaw_gain 0.0
 
 int setup_imu();
 void calibrate_imu();
@@ -101,7 +101,6 @@ long time_prev2;
 
 
 int motor_commands[4];
-float thrust = 0.0;
 float thrust_scaler = 0.0;
 float thrust_desired = 0.0;
 
@@ -142,12 +141,6 @@ int main (int argc, char *argv[]) {
 	//in main before while(1) loop add...
 	setup_joystick();
 	signal(SIGINT, &trap);
-
-	// motor_commands[0] = 2;
-	// motor_commands[1] = 2;
-	// motor_commands[2] = 2;
-	// motor_commands[3] = 2;
-	// set_motors(motor_commands[3], motor_commands[2], motor_commands[1], motor_commands[0]);
     
 	//be sure to update the while(1) in main to use run_program instead
 	while(run_program == 1)
@@ -155,18 +148,11 @@ int main (int argc, char *argv[]) {
 		//to refresh values from shared memory first
 		Joystick joystick_data=*shared_memory;
 
-		// printf("sequence_num: %d\n", joystick_data.sequence_num);
-		// printf("key0: %d, key1: %d, key2: %d, key3: %d", joystick_data.key0, joystick_data.key1, joystick_data.key2, joystick_data.key3);
-
 		read_imu();   
 		update_filter();
 		update_time_elapsed(joystick_data.sequence_num);
 		safety_check(joystick_data.key1);
 		paused_check(joystick_data.key0, joystick_data.key3);
-
-		set_pitch(joystick_data.pitch);
-		set_roll(joystick_data.roll);
-		set_yaw(joystick_data.yaw);
 
 		if (run_program == 0){
 			motor_commands[0] = 0;
@@ -182,13 +168,14 @@ int main (int argc, char *argv[]) {
 			set_motors(motor_commands[3], motor_commands[2], motor_commands[1], motor_commands[0]);
 
 		} else {
+			set_pitch(joystick_data.pitch);
+			set_roll(joystick_data.roll);
+			set_yaw(joystick_data.yaw);
 			set_thrust(joystick_data.thrust);
 			pid_pitch_control();
 			pid_roll_control();
 			yaw_control();
 			set_motors(motor_commands[3], motor_commands[2], motor_commands[1], motor_commands[0]);
-			// set_motors(200, 200,200, 2);
-
 		}
 	}
 
@@ -225,7 +212,6 @@ void read_imu() {
 	int vh=0;
 	int vl=0;
 	int vw=0;
-
 
 	//accel reads
 
@@ -292,7 +278,7 @@ void read_imu() {
 	}          
 	imu_data[5]=-1.0*vw*1000.0/32768.0;//convert to degrees/sec  
 
-	pitch_angle = (-1.0 * atan2(imu_data[0], imu_data[1]) * (180.0/M_PI));
+	pitch_angle = (1.0 * atan2(imu_data[1], imu_data[0]) * (180.0/M_PI));
 	pitch_angle_calibrated = pitch_angle - pitch_calibration;
 	roll_angle = atan2(imu_data[2], imu_data[0]) * (180.0/M_PI);
 	roll_angle_calibrated = roll_angle - roll_calibration;
@@ -326,8 +312,6 @@ void update_filter()
 	integrated_pitch_gyro = integrated_pitch_gyro + (z_gyro_calibrated * imu_diff);
 	roll_t = roll_angle_calibrated * A + (1 - A) * (y_gyro_calibrated * imu_diff + roll_t);
 	pitch_t = pitch_angle_calibrated * A + (1 - A) * (z_gyro_calibrated * imu_diff + pitch_t);
-	
-	// printf("%10.5f; %10.5f; %10.5f; %10.5f; %10.5f; %10.5f\n", pitch_t, roll_t, integrated_pitch_gyro, integrated_roll_gyro, pitch_angle_calibrated, roll_angle_calibrated);
 }
 
 void update_time_elapsed(int sequence_num) {
@@ -491,16 +475,16 @@ void set_thrust(int thrust) {
 void pid_pitch_control() {
 
 	// Proportional control
-	motor_commands[0] = motor_commands[0] + pitch_error * pitch_gain;
-	motor_commands[2] = motor_commands[2] + pitch_error * pitch_gain;
-	motor_commands[1] = motor_commands[1] - pitch_error * pitch_gain;
-	motor_commands[3] = motor_commands[3] - pitch_error * pitch_gain;
+	motor_commands[0] += pitch_error * pitch_gain;
+	motor_commands[2] += pitch_error * pitch_gain;
+	motor_commands[1] -= pitch_error * pitch_gain;
+	motor_commands[3] -= pitch_error * pitch_gain;
 
 	// Derivative control
-	motor_commands[0] = motor_commands[0] - z_gyro_calibrated * pitch_derivative_gain;
-	motor_commands[2] = motor_commands[2] - z_gyro_calibrated * pitch_derivative_gain;
-	motor_commands[1] = motor_commands[1] + z_gyro_calibrated * pitch_derivative_gain;
-	motor_commands[3] = motor_commands[3] + z_gyro_calibrated * pitch_derivative_gain;
+	motor_commands[0] -= z_gyro_calibrated * pitch_derivative_gain;
+	motor_commands[2] -= z_gyro_calibrated * pitch_derivative_gain;
+	motor_commands[1] += z_gyro_calibrated * pitch_derivative_gain;
+	motor_commands[3] += z_gyro_calibrated * pitch_derivative_gain;
 
 	// Integral control
 
@@ -511,10 +495,10 @@ void pid_pitch_control() {
 		integral_pitch = -1.0 * pitch_integral_saturated;
 	}
 
-	motor_commands[0] = (motor_commands[0] + integral_pitch);
-	motor_commands[2] = (motor_commands[2] + integral_pitch);
-	motor_commands[1] = (motor_commands[1] - integral_pitch);
-	motor_commands[3] = (motor_commands[3] - integral_pitch);
+	motor_commands[0] += integral_pitch;
+	motor_commands[2] += integral_pitch;
+	motor_commands[1] -= integral_pitch;
+	motor_commands[3] -= integral_pitch;
 
 	// printf("%d; %d; %10.5f; %10.5f; %10.5f\n", motor_commands[0], motor_commands[1], thrust_desired, pitch_desired * 10, pitch_t * 10);
 	// printf("%d; %d; %10.5f; %10.5f; %10.5f\n", motor_commands[0], motor_commands[1], thrust_desired, pitch_t * 10, z_gyro_calibrated * 10);
@@ -525,16 +509,16 @@ void pid_pitch_control() {
 
 void pid_roll_control() {	
 	// Proportional control
-	motor_commands[0] = motor_commands[0] + roll_error * roll_gain;
-	motor_commands[1] = motor_commands[1] + roll_error * roll_gain;
-	motor_commands[2] = motor_commands[2] - roll_error * roll_gain;
-	motor_commands[3] = motor_commands[3] - roll_error * roll_gain;
+	motor_commands[0] += roll_error * roll_gain;
+	motor_commands[1] += roll_error * roll_gain;
+	motor_commands[2] -= roll_error * roll_gain;
+	motor_commands[3] -= roll_error * roll_gain;
 
 	// Derivative control
-	motor_commands[0] = motor_commands[0] - y_gyro_calibrated * roll_derivative_gain;
-	motor_commands[1] = motor_commands[1] - y_gyro_calibrated * roll_derivative_gain;
-	motor_commands[2] = motor_commands[2] + y_gyro_calibrated * roll_derivative_gain;
-	motor_commands[3] = motor_commands[3] + y_gyro_calibrated * roll_derivative_gain;
+	motor_commands[0] -= y_gyro_calibrated * roll_derivative_gain;
+	motor_commands[1] -= y_gyro_calibrated * roll_derivative_gain;
+	motor_commands[2] += y_gyro_calibrated * roll_derivative_gain;
+	motor_commands[3] += y_gyro_calibrated * roll_derivative_gain;
 
 	// Integral control
 	integral_roll += roll_integral_gain * roll_error;
@@ -544,10 +528,10 @@ void pid_roll_control() {
 		integral_roll = -1.0 * roll_integral_saturated;
 	}
 
-	motor_commands[0] = (motor_commands[0] + integral_roll);
-	motor_commands[1] = (motor_commands[1] + integral_roll);
-	motor_commands[2] = (motor_commands[2] - integral_roll);
-	motor_commands[3] = (motor_commands[3] - integral_roll);
+	motor_commands[0] += integral_roll;
+	motor_commands[1] += integral_roll;
+	motor_commands[2] -= integral_roll;
+	motor_commands[3] -= integral_roll;
 
 	// printf("%d; %d; %10.5f; %10.5f; %10.5f\n", motor_commands[0], motor_commands[1], thrust_desired, pitch_desired * 10, pitch_t * 10);
 	// printf("%d; %d; %10.5f; %10.5f; %10.5f\n", motor_commands[0], motor_commands[1], thrust_desired, pitch_t * 10, z_gyro_calibrated * 10);
@@ -559,10 +543,10 @@ void pid_roll_control() {
 
 void yaw_control() {
 
-	motor_commands[0] = motor_commands[0] - yaw_error * yaw_gain;
-	motor_commands[1] = motor_commands[1] + yaw_error * yaw_gain;
-	motor_commands[2] = motor_commands[2] + yaw_error * yaw_gain;
-	motor_commands[3] = motor_commands[3] - yaw_error * yaw_gain;
+	motor_commands[0] -= yaw_error * yaw_gain;
+	motor_commands[1] += yaw_error * yaw_gain;
+	motor_commands[2] += yaw_error * yaw_gain;
+	motor_commands[3] -= yaw_error * yaw_gain;
 
 	// printf("%d; %d; %d; %d; %10.5f; %10.5f\n", motor_commands[0], motor_commands[1], motor_commands[2], motor_commands[3], x_gyro_calibrated, yaw_desired);
 	printf("%d; %d; %d; %d; %10.5f; %10.5f\n", motor_commands[0], motor_commands[1], motor_commands[2], motor_commands[3], pitch_t, roll_t);
