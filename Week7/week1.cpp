@@ -18,36 +18,26 @@
 #define max_absolute_pitch_angle 45
 #define time_out 0.75
 #define A 0.02
-// #define thrust_neutral 1725
-#define thrust_neutral 1650
-#define thrust_amplitude 150
+#define thrust_neutral 1500
+#define thrust_amplitude 400
 #define thrust_max 2000
 #define thrust_min 0
 #define joystick_max 255
 
-#define pitch_amplitude 4
+#define pitch_amplitude 8
 #define pitch_gain 12.0
 #define pitch_derivative_gain 1.9
 #define pitch_integral_gain 0.3
 #define pitch_integral_saturated 100
 
-#define roll_amplitude 4
+#define roll_amplitude 8
 #define roll_gain 12.0
 #define roll_derivative_gain 1.9
 #define roll_integral_gain 0.3
 #define roll_integral_saturated 100
 
-#define yaw_amplitude 50
+#define yaw_amplitude 100
 #define yaw_gain 5
-
-#define autonomous_yaw_gain 20.0
-#define autonomous_roll_gain 0.25
-#define autonomous_roll_derivative_gain 0.1
-// #define autonomous_roll_gain 0.0
-// #define autonomous_roll_derivative_gain 0.0
-#define autonomous_pitch_gain 0.25
-#define autonomous_pitch_derivative_gain 0.1
-
 
 
 int setup_imu();
@@ -57,7 +47,7 @@ void update_filter();
 void setup_joystick();
 void trap(int signal);
 void safety_check(int key1);
-void joystick_check(int key0, int key3, int key2);
+void paused_check(int key0, int key3);
 void update_time_elapsed(int sequence_num);
 void pid_pitch_control();
 void pid_roll_control();
@@ -68,11 +58,6 @@ void set_yaw(int yaw);
 void set_thrust(int thrust);
 void set_motors(int motor1, int motor2, int motor3, int motor4);
 void motor_enable();
-
-void setup_camera();
-void high_yaw_control(int yaw);
-void high_roll_control(int y);
-void high_pitch_control(int x);
 
 //global variables
 int motor_address,accel_address,gyro_address;
@@ -121,14 +106,6 @@ float integral_roll = 0.0;
 float yaw_desired = 0.0;
 float yaw_error = 0.0;
 
-int autonomous = 0;
-int prev_camera_sequence = 0;
-float prev_camera_y_estimated = 0.0;
-float camera_y_estimated = 0.0;
-float prev_camera_x_estimated = 0.0;
-float camera_x_estimated = 0.0;
-
-
 
 //global variables to add
 struct Joystick
@@ -144,19 +121,6 @@ struct Joystick
 	int sequence_num;
 };
 Joystick* shared_memory;
-
-struct Camera
-{
-  int x;
-  int y;
-  int z;
-  int yaw;
-  int sequence_num;
-};
-
-Camera* camera_memory; 
-Camera camera_data;
-
 int run_program=1;
 int paused = 0;
 
@@ -168,10 +132,8 @@ int main (int argc, char *argv[]) {
 	setup_joystick();
 	signal(SIGINT, &trap);
 
-	setup_camera();
-
-	for (int i = 0; i<700; i++){
-		set_motors(4,4,4,4);
+	for (int i = 0; i<500; i++){
+		set_motors(2,2,2,2);
 	}
 
 	while(run_program == 1)
@@ -183,14 +145,11 @@ int main (int argc, char *argv[]) {
 		update_filter();
 		update_time_elapsed(joystick_data.sequence_num);
 		safety_check(joystick_data.key1);
-		joystick_check(joystick_data.key0, joystick_data.key3, joystick_data.key2);
+		paused_check(joystick_data.key0, joystick_data.key3);
 
 		set_pitch(joystick_data.pitch);
 		set_roll(joystick_data.roll);
 		set_yaw(joystick_data.yaw);
-
-		Camera camera_data=*camera_memory;
-		// printf("camera=%d %d %d %d %d\n\r",camera_data.x,camera_data.y,camera_data.z,camera_data.yaw,camera_data.sequence_num);
 
 		if (run_program == 0){
 			motor_commands[0] = 0;
@@ -204,35 +163,20 @@ int main (int argc, char *argv[]) {
 			motor_commands[2] = 2;
 			motor_commands[3] = 2;
 			set_motors(motor_commands[3], motor_commands[2], motor_commands[1], motor_commands[0]);
-			// printf("%d; %d; %d; %d; %10.5f; %10.5f;%10.5f; %10.5f\n", motor_commands[0], motor_commands[1], motor_commands[2], motor_commands[3], pitch_t, roll_t, pitch_angle_calibrated, roll_angle_calibrated);
+			printf("%d; %d; %d; %d; %10.5f; %10.5f;%10.5f; %10.5f\n", motor_commands[0], motor_commands[1], motor_commands[2], motor_commands[3], pitch_t, roll_t, pitch_angle_calibrated, roll_angle_calibrated);
 
 		} else {
 			set_thrust(joystick_data.thrust);
 			pid_pitch_control();
 			pid_roll_control();
 			yaw_control();
-
-			// printf("%d\n", autonomous);
-
-			// printf("%d\n\r", camera_data.yaw);
-
-
-			if (autonomous==1) {
-				high_yaw_control(camera_data.yaw);
-				high_roll_control(camera_data.y);
-				high_pitch_control(camera_data.x);
-				// printf("%d; %10.5f\n\r", camera_data.yaw, x_gyro_calibrated);
-			}
-			
-			// printf("%d; %d; %d; %d; %10.5f; %10.5f;%10.5f; %10.5f\n", motor_commands[0], motor_commands[1], motor_commands[2], motor_commands[3], pitch_t, roll_t, pitch_angle_calibrated, roll_angle_calibrated);
+			printf("%d; %d; %d; %d; %10.5f; %10.5f;%10.5f; %10.5f\n", motor_commands[0], motor_commands[1], motor_commands[2], motor_commands[3], pitch_t, roll_t, pitch_angle_calibrated, roll_angle_calibrated);
 			// motor_commands[0] = 0;
 			// motor_commands[1] = 0;
 			// motor_commands[2] = 0;
 			// motor_commands[3] = 0;
 			set_motors(motor_commands[3], motor_commands[2], motor_commands[1], motor_commands[0]);
 		}
-		prev_camera_sequence = camera_data.sequence_num;
-
 	}
 
 	return 0;
@@ -263,7 +207,8 @@ void calibrate_imu() {
 		pitch_calibration=pitch_calibration/calibration;
 		accel_z_calibration=accel_z_calibration/calibration;
 
-	printf("calibration complete, %f %f %f %f %f %f\n\r",x_gyro_calibration,y_gyro_calibration,z_gyro_calibration,roll_calibration,pitch_calibration,accel_z_calibration);
+printf("calibration complete, %f %f %f %f %f %f\n\r",x_gyro_calibration,y_gyro_calibration,z_gyro_calibration,roll_calibration,pitch_calibration,accel_z_calibration);
+
 }
 
 void read_imu() {
@@ -351,7 +296,8 @@ void read_imu() {
 	z_gyro_calibrated = imu_data[5] - z_gyro_calibration;
 }
 
-void update_filter() {
+void update_filter()
+{
 	//get current time in nanoseconds
 	timespec_get(&te,TIME_UTC);
 	time_curr=te.tv_nsec;
@@ -403,6 +349,7 @@ void update_time_elapsed(int sequence_num) {
 		prev_sequence_number = sequence_num;
 	
 }
+
 
 int setup_imu() {
 	wiringPiSetup ();
@@ -507,16 +454,12 @@ void safety_check(int key1) {
 	}
 }
 
-void joystick_check(int key0, int key3, int key2) {
+void paused_check(int key0, int key3) {
+
 	if (key0 == 1) {
 		paused = 1;
 	} else if (key3 == 1) {
 		paused = 0;
-	}
-
-	if (key2 == 1) {
-		autonomous = 1-autonomous;
-		// printf("%d", autonomous);
 	}
 }
 
@@ -536,6 +479,7 @@ void set_pitch(int pitch) {
 
 	pitch_desired = pitch_scaler * pitch_amplitude;
 	pitch_error = pitch_desired - pitch_t;
+
 }
 
 void pid_pitch_control() {
@@ -568,6 +512,7 @@ void pid_pitch_control() {
 	motor_commands[2] = (motor_commands[2] + integral_pitch);
 	motor_commands[1] = (motor_commands[1] - integral_pitch);
 	motor_commands[3] = (motor_commands[3] - integral_pitch);
+
 }
 
 void pid_roll_control() {	
@@ -602,14 +547,21 @@ void pid_roll_control() {
 	motor_commands[1] = (motor_commands[1] + integral_roll);
 	motor_commands[2] = (motor_commands[2] - integral_roll);
 	motor_commands[3] = (motor_commands[3] - integral_roll);
+
 }
 
 void yaw_control() {
+
 	motor_commands[0] = motor_commands[0] - yaw_error * yaw_gain;
 	motor_commands[1] = motor_commands[1] + yaw_error * yaw_gain;
 	motor_commands[2] = motor_commands[2] + yaw_error * yaw_gain;
 	motor_commands[3] = motor_commands[3] - yaw_error * yaw_gain;
+
+	
+
+
 }
+
 
 void set_roll(int roll) {
 	float roll_scaler = 1.0*((roll - joystick_max/2.0))/(joystick_max / 2.0);
@@ -753,6 +705,7 @@ void motor_enable() {
     }
 }
 
+
 void set_motors(int motor0, int motor1, int motor2, int motor3) {
     if(motor0<0)
       motor0=0;
@@ -819,85 +772,4 @@ void set_motors(int motor0, int motor1, int motor2, int motor3) {
     usleep(com_delay);    
     wiringPiI2CWrite(motor_address,data[1]);    
     usleep(com_delay);
-}
-
-void setup_camera() {
-
-  int segment_id;   
-  struct shmid_ds shmbuffer; 
-  int segment_size; 
-  const int shared_segment_size = sizeof(struct Camera);
-  int smhkey=123456;
-  
-  /* Allocate a shared memory segment.  */ 
-  segment_id = shmget (smhkey, shared_segment_size,IPC_CREAT | 0666); 
-  /* Attach the shared memory segment.  */ 
-  camera_memory = (Camera*) shmat (segment_id, 0, 0); 
-  printf ("shared memory attached at address %p\n", camera_memory); 
-  /* Determine the segment's size. */ 
-  shmctl (segment_id, IPC_STAT, &shmbuffer); 
-  segment_size  =               shmbuffer.shm_segsz; 
-  printf ("segment size: %d\n", segment_size); 
-  /* Write a string to the shared memory segment.  */ 
-  // sprintf (shared_memory, "test!!!!."); 
-}
-
-void high_yaw_control(int yaw) {
-	// printf("%d\n\r", yaw);
-	int yaw_autonomous_error = -yaw;
-	// printf("%10.5f\n\r", yaw_autonomous_error);
-	motor_commands[0] = motor_commands[0] - yaw_autonomous_error * autonomous_yaw_gain;
-	motor_commands[1] = motor_commands[1] + yaw_autonomous_error * autonomous_yaw_gain;
-	motor_commands[2] = motor_commands[2] + yaw_autonomous_error * autonomous_yaw_gain;
-	motor_commands[3] = motor_commands[3] - yaw_autonomous_error * autonomous_yaw_gain;
-}
-
-void high_roll_control(int y) {
-
-	printf("%d; %10.5f\n\r", y, camera_y_estimated);
-
-	if (camera_data.sequence_num != prev_camera_sequence) {
-		prev_camera_y_estimated = camera_y_estimated;
-		camera_y_estimated = (camera_y_estimated * 0.6) + (y * 0.4);
-	}
-
-	float autonomous_roll_error = camera_y_estimated;
-
-	motor_commands[0] = motor_commands[0] + autonomous_roll_error * autonomous_roll_gain;
-	motor_commands[1] = motor_commands[1] + autonomous_roll_error * autonomous_roll_gain;
-	motor_commands[2] = motor_commands[2] - autonomous_roll_error * autonomous_roll_gain;
-	motor_commands[3] = motor_commands[3] - autonomous_roll_error * autonomous_roll_gain;
-
-	// Derivative control
-	float y_change = camera_y_estimated - prev_camera_y_estimated;
-
-	motor_commands[0] = motor_commands[0] - y_change * autonomous_roll_derivative_gain;
-	motor_commands[1] = motor_commands[1] - y_change * autonomous_roll_derivative_gain;
-	motor_commands[2] = motor_commands[2] + y_change * autonomous_roll_derivative_gain;
-	motor_commands[3] = motor_commands[3] + y_change * autonomous_roll_derivative_gain;
-
-}
-
-void high_pitch_control(int x) {
-
-	if (camera_data.sequence_num != prev_camera_sequence) {
-		prev_camera_x_estimated = camera_x_estimated;
-		camera_x_estimated = (camera_x_estimated * 0.6) + (x * 0.4);
-	}
-
-	float autonomous_pitch_error = camera_x_estimated - 100;
-
-	// Proportional control
-	motor_commands[0] = motor_commands[0] + autonomous_pitch_error * autonomous_pitch_gain;
-	motor_commands[2] = motor_commands[2] + autonomous_pitch_error * autonomous_pitch_gain;
-	motor_commands[1] = motor_commands[1] - autonomous_pitch_error * autonomous_pitch_gain;
-	motor_commands[3] = motor_commands[3] - autonomous_pitch_error * autonomous_pitch_gain;
-
-	float x_change = camera_x_estimated - prev_camera_x_estimated;
-	// Derivative control
-	motor_commands[0] = motor_commands[0] - x_change * autonomous_pitch_derivative_gain;
-	motor_commands[2] = motor_commands[2] - x_change * autonomous_pitch_derivative_gain;
-	motor_commands[1] = motor_commands[1] + x_change * autonomous_pitch_derivative_gain;
-	motor_commands[3] = motor_commands[3] + x_change * autonomous_pitch_derivative_gain;
-
 }

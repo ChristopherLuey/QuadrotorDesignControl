@@ -1,0 +1,54 @@
+//add new struct for camera data shared memory:
+
+struct Camera
+{
+  int x;
+  int y;
+  int z;
+  int yaw;
+  int sequence_num;
+};
+
+Camera* camera_memory; 
+
+//create a new camera shared memory function:
+
+void setup_camera();
+
+//before main, create camera data struct:
+Camera camera_data;
+
+
+//in main before loop, init camera shared memory:
+setup_camera();
+
+//how to update and read camera shared memory:
+Camera camera_data=*camera_memory;
+printf("camera=%d %d %d %d %d\n\r",camera_data.x,camera_data.y,camera_data.z,camera_data.yaw,camera_data.sequence_num);
+
+
+
+//function to setup camera shared memory:
+
+void setup_camera()
+{
+
+  int segment_id;   
+  struct shmid_ds shmbuffer; 
+  int segment_size; 
+  const int shared_segment_size = sizeof(struct Camera);
+  int smhkey=123456;
+  
+  /* Allocate a shared memory segment.  */ 
+  segment_id = shmget (smhkey, shared_segment_size,IPC_CREAT | 0666); 
+  /* Attach the shared memory segment.  */ 
+  camera_memory = (Camera*) shmat (segment_id, 0, 0); 
+  printf ("shared memory attached at address %p\n", camera_memory); 
+  /* Determine the segment's size. */ 
+  shmctl (segment_id, IPC_STAT, &shmbuffer); 
+  segment_size  =               shmbuffer.shm_segsz; 
+  printf ("segment size: %d\n", segment_size); 
+  /* Write a string to the shared memory segment.  */ 
+  // sprintf (shared_memory, "test!!!!."); 
+
+}
